@@ -26,6 +26,9 @@ config SND_OMAP_SOC_DMIC
 config SND_OMAP_SOC_HDMI
 	tristate
 
+config ABE_44100
+	tristate
+
 config SND_OMAP_SOC_VXREC
 	tristate
 
@@ -112,9 +115,8 @@ config SND_OMAP_SOC_SDP3430
 	  SDP3430.
 
 config SND_OMAP_SOC_SDP4430
-	tristate "SoC Audio support for Texas Instruments SDP4430 or PandaBoard"
-	depends on TWL4030_CORE && \
-		(MACH_OMAP_4430SDP || MACH_OMAP4_PANDA || MACH_OMAP4_TABLET)
+	tristate "SoC Audio support for Texas Instruments SDP4430, PandaBoard, Ovation and Hummingbird"
+	depends on TWL4030_CORE && (MACH_OMAP_4430SDP || MACH_OMAP4_PANDA || MACH_OMAP_OVATION || MACH_OMAP_HUMMINGBIRD)
 	select SND_OMAP_SOC
 	select SND_OMAP_SOC_MCPDM
 	select SND_SOC_TWL6040
@@ -128,6 +130,36 @@ config SND_OMAP_SOC_SDP4430
 	help
 	  Say Y if you want to add support for SoC audio on Texas Instruments
 	  SDP4430 or PandaBoard.
+
+config SND_OMAP_SOC_LINEOUT_AUDIO
+	tristate "Line-Out audio support for BN Ovation and Hummingbird platforms"
+	depends on SND_OMAP_SOC_SDP4430 && (MACH_OMAP_OVATION || MACH_OMAP_HUMMINGBIRD)
+	help
+	  Say Y if you want to add support for line-out audio on Barnes and Noble devices.
+
+config SND_OMAP_SOC_ACCLAIM
+	tristate "SoC Audio support for OMAP4 Panda-AIC board with AIC3100"
+	depends on SND_OMAP_SOC
+	select SND_OMAP_SOC_MCBSP
+	select SND_SOC_TLV320AIC3100
+	select SND_SOC_OMAP4_AIC3100
+	select SND_OMAP_SOC_ABE
+	select SND_OMAP_SOC_ABE_DSP
+    select ABE_44100
+	help
+	  Say Y if you want to add support for SoC audio on the OMAP4 Panda board. Uses MCBSP2.
+
+config SND_OMAP_SOC_RY_AIC3110
+	tristate "SoC Audio support for OMAP4 and AIC3110 Audio Codec Chipset"
+	depends on SND_OMAP_SOC
+	select SND_OMAP_SOC_MCBSP
+	select SND_SOC_AIC3110
+	#select SND_SOC_TLV320AIC3100
+	select SND_OMAP_SOC_ABE
+	select SND_OMAP_SOC_ABE_DSP
+	select ABE_44100
+	help
+	Say Y if you want to add support for SoC audio on the OMAP4 Board
 
 config SND_OMAP_SOC_OMAP4_HDMI
 	tristate "SoC Audio support for Texas Instruments OMAP4 HDMI"
@@ -147,16 +179,14 @@ config SND_OMAP_SOC_ABE_DL2
 	  connected to DL1 path.
 
 config SND_OMAP4_ABE_USE_ALT_FW
-	bool "Use alternate ABE firmware configuration (DMIC support)"
+	bool "Use alternate ABE firmware, which includes DMIC support"
 	default n
 	depends on SND_OMAP_SOC && SND_OMAP_SOC_ABE_DSP
 	help
-	  The ABE firmware does not have enough room to use the Bluetooth FIR
-	  filters and also include digital microphone (DMIC) support.  Therefore
-	  DMIC support is disabled by default.  If you say Y, it will remove the
-          BT FIR filters and enable DMIC support.
+	  The default firmware has several improvements, but disables the DMIC
+	  (Digital MICrophone) feature.
 
-	  Say Y if you have DMICs (Digital Microphones) that you wish to use.
+	  Say Y if you have DMIC (Digital Microphones) that you wish to use.
 	  Say N otherwise, or if unsure.
 
 config SND_OMAP_SOC_OMAP3_PANDORA

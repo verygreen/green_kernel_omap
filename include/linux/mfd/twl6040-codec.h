@@ -147,17 +147,24 @@
 #define TWL6040_LPLLFIN			0x08
 #define TWL6040_HPLLSEL			0x10
 
+/* AMICBCTL (0x0A) fields */
+
+#define TWL6040_AMICBCTL_HMICBENA	0x01
+#define TWL6040_AMICBCTL_HMICBSLP	0x02
+
 /* HSLCTL (0x10) fields */
 
 #define TWL6040_HSDACENAL		0x01
 #define TWL6040_HSDACMODEL		0x02
 #define TWL6040_HSDRVMODEL		0x08
+#define TWL6040_HSDRVPDL		0x10
 
 /* HSRCTL (0x11) fields */
 
 #define TWL6040_HSDACENAR		0x01
 #define TWL6040_HSDACMODER		0x02
 #define TWL6040_HSDRVMODER		0x08
+#define TWL6040_HSDRVPDR		0x10
 
 /* EARCTL (0x13) fields */
 
@@ -166,10 +173,12 @@
 /* HFLCTL (0x14) fields */
 
 #define TWL6040_HFDRVENAL		0x10
+#define TWL6040_HFSWENAL		0x40
 
 /* HFRCTL (0x16) fields */
 
 #define TWL6040_HFDRVENAR		0x10
+#define TWL6040_HFSWENAR		0x40
 
 /* VIBCTLL (0x18) fields */
 
@@ -182,6 +191,11 @@
 #define TWL6040_VIBCTRLRN		0x10
 #define TWL6040_VIBCTRLRP		0x04
 #define TWL6040_VIBENAR			0x01
+
+/* HKCTL1 (0x1C) fields */
+
+#define TWL6040_HKCTL1_HKEN		0x01
+#define TWL6040_HKCTL1_HKPARADIS	0x02
 
 /* GPOCTL (0x1E) fields */
 
@@ -222,6 +236,7 @@
 #define TWL6040_CELLS			2
 
 #define TWL6040_POWER_UP_TIME		16 /* ms */
+#define TWL6040_MIC_DETECT_TIMEOUT	60000 /* ms */
 
 #define TWL6040_IRQ_TH			0
 #define TWL6040_IRQ_PLUG		1

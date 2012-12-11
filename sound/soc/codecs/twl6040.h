@@ -23,8 +23,13 @@
 #define __TWL6040_H__
 
 #include <linux/mfd/twl6040-codec.h>
+#include <sound/soc.h>
 
 void twl6040_hs_jack_detect(struct snd_soc_codec *codec,
 			    struct snd_soc_jack *jack, int report);
+void twl6040_lo_jack_detect(struct snd_soc_codec *codec,
+				struct snd_soc_jack *jack, int report);
+int twl6040_register_hook_notifier(struct notifier_block *nb);
+int twl6040_unregister_hook_notifier(struct notifier_block *nb);
 
 #endif /* End of __TWL6040_H__ */

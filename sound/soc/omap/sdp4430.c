@@ -48,9 +48,32 @@
 #include "../codecs/twl6040.h"
 
 static struct regulator *av_switch_reg;
+static struct clk *mclk;
+static bool mclk_enabled;
 static int twl6040_power_mode;
 static int mcbsp_cfg;
 static struct snd_soc_codec *twl6040_codec;
+
+static int sdp4430_mclk_enable(void)
+{
+	int ret = 0;
+
+	if (!mclk_enabled) {
+		ret = clk_enable(mclk);
+		if (!ret)
+			mclk_enabled = true;
+	}
+
+	return ret;
+}
+
+static void sdp4430_mclk_disable(void)
+{
+	if (mclk_enabled) {
+		clk_disable(mclk);
+		mclk_enabled = false;
+	}
+}
 
 static int sdp4430_modem_mcbsp_configure(struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params, int flag)
@@ -152,17 +175,13 @@ static int sdp4430_mcpdm_startup(struct snd_pcm_substream *substream)
 	if (twl6040_power_mode) {
 		clk_id = TWL6040_HPPLL_ID;
 		freq = 38400000;
-
-		/*
-		 * TWL6040 requires MCLK to be active as long as
-		 * high-performance mode is in use. Glitch-free mux
-		 * cannot tolerate MCLK gating
-		 */
-		ret = cdc_tcxo_set_req_int(CDC_TCXO_CLK2, 1);
+#if defined(CONFIG_MACH_OMAP_OVATION) || defined(CONFIG_MACH_OMAP_HUMMINGBIRD)
+		ret = sdp4430_mclk_enable();
 		if (ret) {
 			printk(KERN_ERR "failed to enable twl6040 MCLK\n");
 			goto err;
 		}
+#endif
 	} else {
 		clk_id = TWL6040_LPPLL_ID;
 		freq = 32768;
@@ -176,17 +195,19 @@ static int sdp4430_mcpdm_startup(struct snd_pcm_substream *substream)
 		goto err;
 	}
 
-	/* low-power mode uses 32k clock, MCLK is not required */
-	if (!twl6040_power_mode) {
-		ret = cdc_tcxo_set_req_int(CDC_TCXO_CLK2, 0);
-		if (ret)
-			printk(KERN_ERR "failed to disable twl6040 MCLK\n");
-	}
+#if defined(CONFIG_MACH_OMAP_OVATION) || defined(CONFIG_MACH_OMAP_HUMMINGBIRD)
+	if (!twl6040_power_mode)
+		sdp4430_mclk_disable();
+#endif
 
 	return 0;
 
 err:
+#if defined(CONFIG_MACH_OMAP_OVATION) || defined(CONFIG_MACH_OMAP_HUMMINGBIRD)
+	sdp4430_mclk_disable();
+#endif
 	twl6040_disable(twl6040);
+
 	return ret;
 }
 
@@ -198,6 +219,7 @@ static void sdp4430_mcpdm_shutdown(struct snd_pcm_substream *substream)
 
 	/* TWL6040 supplies McPDM PAD_CLKS */
 	twl6040_disable(twl6040);
+	sdp4430_mclk_disable();
 }
 
 static struct snd_soc_ops sdp4430_mcpdm_ops = {
@@ -350,13 +372,27 @@ static struct snd_soc_jack_pin hs_jack_pins[] = {
 	{
 		.pin = "Headset Stereophone",
 		.mask = SND_JACK_HEADPHONE,
-	},
+	}
+};
+
+/* Line-Out jack */
+static struct snd_soc_jack lo_jack;
+
+/* Line-Out jack detection DAPM pins */
+static struct snd_soc_jack_pin lo_jack_pins[] = {
+	{
+		.pin = "Line Out",
+		.mask = SND_JACK_LINEOUT,
+	}
 };
 
 static int sdp4430_av_switch_event(struct snd_soc_dapm_widget *w,
 				   struct snd_kcontrol *kcontrol, int event)
 {
 	int ret;
+
+	if (!av_switch_reg)
+		return 0;
 
 	if (SND_SOC_DAPM_EVENT_ON(event))
 		ret = regulator_enable(av_switch_reg);
@@ -400,6 +436,7 @@ static const struct snd_kcontrol_new sdp4430_controls[] = {
 static const struct snd_soc_dapm_widget sdp4430_twl6040_dapm_widgets[] = {
 	SND_SOC_DAPM_MIC("Ext Mic", NULL),
 	SND_SOC_DAPM_SPK("Ext Spk", NULL),
+	SND_SOC_DAPM_SPK("Line Out", NULL),
 	SND_SOC_DAPM_MIC("Headset Mic", NULL),
 	SND_SOC_DAPM_HP("Headset Stereophone", NULL),
 	SND_SOC_DAPM_SPK("Earphone Spk", NULL),
@@ -418,13 +455,16 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"SUBMIC", NULL, "Main Mic Bias"},
 	{"Main Mic Bias", NULL, "Ext Mic"},
 
-	/* External Speakers: HFL, HFR */
+	/* HF Speakers: HFL, HFR */
 	{"Ext Spk", NULL, "HFL"},
 	{"Ext Spk", NULL, "HFR"},
 
+	/* Line Out: AUXL, AUXL */
+	{"Line Out", NULL, "SPKL"},
+	{"Line Out", NULL, "SPKR"},
+
 	/* Headset Mic: HSMIC with bias */
-	{"HSMIC", NULL, "Headset Mic Bias"},
-	{"Headset Mic Bias", NULL, "Headset Mic"},
+	{"HSMIC", NULL, "Headset Mic"},
 	{"Headset Mic", NULL, "AV Switch Supply"},
 
 	/* Headset Stereophone (Headphone): HSOL, HSOR */
@@ -522,17 +562,31 @@ static int sdp4430_twl6040_init(struct snd_soc_pcm_runtime *rtd)
 
 	/* Headset jack detection */
 	ret = snd_soc_jack_new(codec, "Headset Jack",
-				SND_JACK_HEADSET, &hs_jack);
+					SND_JACK_HEADSET, &hs_jack);
 	if (ret)
 		return ret;
 
 	ret = snd_soc_jack_add_pins(&hs_jack, ARRAY_SIZE(hs_jack_pins),
 				hs_jack_pins);
+#if defined(CONFIG_SND_OMAP_SOC_LINEOUT_AUDIO)
+	/* Line-out jack detection */
+	ret = snd_soc_jack_new(codec, "Line-Out Jack",
+					SND_JACK_LINEOUT, &lo_jack);
+	if (ret)
+		return ret;
 
+	ret = snd_soc_jack_add_pins(&lo_jack, ARRAY_SIZE(lo_jack_pins),
+				lo_jack_pins);
+#endif
 	if (machine_is_omap_4430sdp() || machine_is_omap_tabletblaze()
-		|| machine_is_omap4_panda())
+		|| machine_is_omap4_panda() || machine_is_omap_ovation()
+		|| machine_is_omap_hummingbird()) {
+
 		twl6040_hs_jack_detect(codec, &hs_jack, SND_JACK_HEADSET);
-	else
+#if defined(CONFIG_SND_OMAP_SOC_LINEOUT_AUDIO)
+		twl6040_lo_jack_detect(codec, &lo_jack, SND_JACK_LINEOUT);
+#endif
+	} else
 		snd_soc_jack_report(&hs_jack, SND_JACK_HEADSET, SND_JACK_HEADSET);
 
 	/* DC offset cancellation computation */
@@ -937,8 +991,13 @@ static struct snd_soc_dai_link sdp4430_dai[] = {
 		.name = OMAP_ABE_BE_BT_VX_UL,
 		.stream_name = "BT Capture",
 
+#if (defined(CONFIG_MACH_OMAP_OVATION)||defined(CONFIG_MACH_OMAP_HUMMINGBIRD))
+		/* ABE components - MCBSP3 - BT-VX */
+		.cpu_dai_name = "omap-mcbsp-dai.2",
+#else
 		/* ABE components - MCBSP1 - BT-VX */
 		.cpu_dai_name = "omap-mcbsp-dai.0",
+#endif
 		.platform_name = "aess",
 
 		/* Bluetooth */
@@ -955,8 +1014,13 @@ static struct snd_soc_dai_link sdp4430_dai[] = {
 		.name = OMAP_ABE_BE_BT_VX_DL,
 		.stream_name = "BT Playback",
 
+#if (defined(CONFIG_MACH_OMAP_OVATION)||defined(CONFIG_MACH_OMAP_HUMMINGBIRD))
+		/* ABE components - MCBSP3 - BT-VX */
+		.cpu_dai_name = "omap-mcbsp-dai.2",
+#else
 		/* ABE components - MCBSP1 - BT-VX */
 		.cpu_dai_name = "omap-mcbsp-dai.0",
+#endif
 		.platform_name = "aess",
 
 		/* Bluetooth */
@@ -1090,8 +1154,9 @@ static int __init sdp4430_soc_init(void)
 	int ret;
 
 	if (!machine_is_omap_4430sdp() && !machine_is_omap4_panda() &&
-		!machine_is_omap_tabletblaze()) {
-		pr_debug("Not SDP4430, BlazeTablet or PandaBoard!\n");
+		!machine_is_omap_tabletblaze() && !machine_is_omap_ovation() &&
+		!machine_is_omap_hummingbird()) {
+		pr_err("Not SDP4430, BlazeTablet, PandaBoard, Ovation or Hummingbird!\n");
 		return -ENODEV;
 	}
 	printk(KERN_INFO "SDP4430 SoC init\n");
@@ -1101,6 +1166,10 @@ static int __init sdp4430_soc_init(void)
 		snd_soc_sdp4430.name = "Panda";
 	else if (machine_is_omap_tabletblaze())
 		snd_soc_sdp4430.name = "Tablet44xx";
+	else if (machine_is_omap_ovation())
+		snd_soc_sdp4430.name = "Ovation";
+	else if (machine_is_omap_hummingbird())
+		snd_soc_sdp4430.name = "Hummingbird";
 
 	sdp4430_snd_device = platform_device_alloc("soc-audio", -1);
 	if (!sdp4430_snd_device) {
@@ -1125,6 +1194,18 @@ static int __init sdp4430_soc_init(void)
 		goto err_dev;
 	}
 
+#if ( defined (CONFIG_MACH_OMAP_OVATION) || defined (CONFIG_MACH_OMAP_HUMMINGBIRD) )
+	mclk = clk_get(&sdp4430_snd_device->dev, "auxclk1_ck");
+	if (IS_ERR(mclk)) {
+		ret = PTR_ERR(mclk);
+		printk(KERN_ERR "sdp4430: could not get auxclk1 as MCLK\n");
+		goto err_dev;
+	}
+
+	/* default mode is low power without MCLK */
+	twl6040_power_mode = 0;
+	mclk_enabled = false;
+#else
 	av_switch_reg = regulator_get(&sdp4430_snd_device->dev, "av-switch");
 	if (IS_ERR(av_switch_reg)) {
 		ret = PTR_ERR(av_switch_reg);
@@ -1132,6 +1213,7 @@ static int __init sdp4430_soc_init(void)
 			ret);
 		goto err_dev;
 	}
+#endif
 
 	/* Default mode is low-power, MCLK not required */
 	twl6040_power_mode = 0;
@@ -1155,6 +1237,10 @@ module_init(sdp4430_soc_init);
 
 static void __exit sdp4430_soc_exit(void)
 {
+#if ( defined (CONFIG_MACH_OMAP_OVATION) || defined (CONFIG_MACH_OMAP_HUMMINGBIRD) )
+	sdp4430_mclk_disable();
+	clk_put(mclk);
+#endif
 	regulator_put(av_switch_reg);
 	cdc_tcxo_set_req_int(CDC_TCXO_CLK2, 0);
 	cdc_tcxo_set_req_prio(CDC_TCXO_CLK2, CDC_TCXO_PRIO_REQINT);
@@ -1166,4 +1252,3 @@ module_exit(sdp4430_soc_exit);
 MODULE_AUTHOR("Misael Lopez Cruz <x0052729@ti.com>");
 MODULE_DESCRIPTION("ALSA SoC SDP4430");
 MODULE_LICENSE("GPL");
-

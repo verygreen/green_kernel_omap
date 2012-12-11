@@ -58,6 +58,8 @@
 #define OMAP_ABE_BE_DMIC0		"DMIC0"
 #define OMAP_ABE_BE_DMIC1		"DMIC1"
 #define OMAP_ABE_BE_DMIC2		"DMIC2"
+#define OMAP_ABE_BE_MM_EXT0_DL          "FM-EXT-DL"
+#define OMAP_ABE_BE_MM_EXT0_UL          "FM-EXT-UL"
 #define OMAP_ABE_BE_VXREC		"VXREC"
 
 #define OMAP_ABE_DL1_NO_PDM		0

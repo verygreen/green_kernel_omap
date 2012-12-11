@@ -1440,8 +1440,11 @@ int snd_soc_resume(struct device *dev)
 		soc_resume_deferred(&card->deferred_resume_work);
 	} else {
 		dev_dbg(dev, "Scheduling resume work\n");
-		if (!schedule_work(&card->deferred_resume_work))
-			dev_err(dev, "resume work item may be lost\n");
+		if (card->instantiated) {
+			if (!schedule_work(&card->deferred_resume_work))
+				dev_err(dev, "resume work item may be lost\n");
+		} else
+			printk(KERN_WARNING "Card %s not instantiated!\n", card->name);
 	}
 
 	return 0;

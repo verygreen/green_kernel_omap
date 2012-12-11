@@ -31,6 +31,7 @@
 #include <linux/io.h>
 #include <linux/slab.h>
 #include <linux/pm_runtime.h>
+#include <linux/delay.h>
 
 #include <plat/dma.h>
 #include <plat/dmic.h>
@@ -399,6 +400,8 @@ static int omap_dmic_dai_trigger(struct snd_pcm_substream *substream,
 		dmic->running++;
 		dmic_config_up_channels(dmic, dai->id, 1);
 		dmic_set_up_channels(dmic);
+		/* this delay will reduce the pop-noise after DMIC reset */
+		mdelay(100);
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
 		dmic->running--;
