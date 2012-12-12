@@ -184,7 +184,7 @@ static unsigned long add_req_tput(struct device *dev, unsigned long level)
 
 	if (!dev) {
 		pr_err("Invalid dev pointer\n");
-		ret = 0;
+		ret = -1;
 	}
 	mutex_lock(&bus_tput->throughput_mutex);
 	user = user_lookup(dev);
@@ -193,7 +193,7 @@ static unsigned long add_req_tput(struct device *dev, unsigned long level)
 		if (IS_ERR(user)) {
 			pr_err("Couldn't get user from the list to"
 			       "add new throughput constraint");
-			ret = 0;
+			ret = -1;
 			goto unlock;
 		}
 		bus_tput->target_level += level;
@@ -239,7 +239,7 @@ static unsigned long remove_req_tput(struct device *dev)
 	if (!found) {
 		/* No such user exists */
 		pr_err("Invalid Device Structure\n");
-		ret = 0;
+		ret = -1;
 		goto unlock;
 	}
 	bus_tput->target_level -= user->level;
@@ -276,8 +276,11 @@ int omap_pm_set_min_bus_tput_helper(struct device *dev, u8 agent_id, long r)
 	else
 		target_level = add_req_tput(dev, r);
 
+	if (target_level == -1)
+		goto unlock;
+
 	/* Convert the throughput(in KiB/s) into Hz. */
-	target_level = (target_level * 1000) / 4;
+	target_level = ((unsigned long long) target_level * 1000) / 4;
 
 	ret = omap_device_scale(&dummy_l3_dev, l3_dev, target_level);
 	if (ret)
