@@ -996,6 +996,8 @@ static long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			return -EFAULT;
 		data.handle = ion_alloc(client, data.len, data.align,
 					     data.flags);
+		if (IS_ERR(data.handle))
+			return PTR_ERR(data.handle);
 		if (copy_to_user((void __user *)arg, &data, sizeof(data)))
 			return -EFAULT;
 		break;
@@ -1048,7 +1050,7 @@ static long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 		data.handle = ion_import_fd(client, data.fd);
 		if (IS_ERR(data.handle))
-			data.handle = NULL;
+			return PTR_ERR(data.handle);
 		if (copy_to_user((void __user *)arg, &data,
 				 sizeof(struct ion_fd_data)))
 			return -EFAULT;
