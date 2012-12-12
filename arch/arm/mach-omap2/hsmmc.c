@@ -23,6 +23,10 @@
 #include "hsmmc.h"
 #include "control.h"
 
+#include <generated/mach-types.h>
+#include "board-hummingbird.h"
+#include "board-ovation.h"
+
 #if defined(CONFIG_MMC_OMAP_HS) || defined(CONFIG_MMC_OMAP_HS_MODULE)
 
 static u16 control_pbias_offset;
@@ -502,9 +506,15 @@ void __init omap2_hsmmc_init(struct omap2_hsmmc_info *controllers)
 			OMAP4_SDMMC1_PUSTRENGTH_GRP1_MASK);
 		reg &= ~(OMAP4_SDMMC1_PUSTRENGTH_GRP2_MASK |
 			OMAP4_SDMMC1_PUSTRENGTH_GRP3_MASK);
-		reg |= (OMAP4_USBC1_DR0_SPEEDCTRL_MASK|
-			OMAP4_SDMMC1_DR1_SPEEDCTRL_MASK |
-			OMAP4_SDMMC1_DR2_SPEEDCTRL_MASK);
+		if ((machine_is_omap_hummingbird() &&
+				(system_rev > HUMMINGBIRD_EVT0B)) ||
+				machine_is_omap_ovation())
+			reg |= (OMAP4_SDMMC1_DR0_SPEEDCTRL_MASK |
+				OMAP4_SDMMC1_DR1_SPEEDCTRL_MASK |
+				OMAP4_SDMMC1_DR2_SPEEDCTRL_MASK);
+		else
+			reg |= (OMAP4_SDMMC1_DR1_SPEEDCTRL_MASK |
+				OMAP4_SDMMC1_DR2_SPEEDCTRL_MASK);
 		omap4_ctrl_pad_writel(reg, control_mmc1);
 	}
 
