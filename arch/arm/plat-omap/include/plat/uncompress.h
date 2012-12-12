@@ -161,10 +161,18 @@ static inline void __arch_decomp_setup(unsigned long arch_id)
 		DEBUG_LL_OMAP3(3, overo);
 		DEBUG_LL_OMAP3(3, touchbook);
 
+		/* omap4 based boards using UART1 */
+		DEBUG_LL_OMAP4(1, omap_acclaim);
+
 		/* omap4 based boards using UART3 */
 		DEBUG_LL_OMAP4(3, omap_4430sdp);
 		DEBUG_LL_OMAP4(3, omap4_panda);
-		DEBUG_LL_OMAP4(3, omap_tabletblaze);
+
+		/* ovation boards using UART1 */
+		DEBUG_LL_OMAP4(1, omap_ovation);
+
+		/* hummingbird boards using UART1 */
+		DEBUG_LL_OMAP4(1, omap_hummingbird);
 
 		/* zoom2/3 external uart */
 		DEBUG_LL_ZOOM(omap_zoom2);
