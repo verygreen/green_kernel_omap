@@ -630,7 +630,7 @@ static struct omap_rpmsg_vproc omap_rpmsg_vprocs[] = {
 		.base_vq_id	= 0,
 		.hardcoded_chnls = omap_ipuc0_hardcoded_chnls,
 		.slave_next	= &omap_rpmsg_vprocs[1],
-		.bootcstr_freq	= 400000000,
+		.bootcstr_freq	= 1000000,
 		.bootcstr_type	= RPROC_CONSTRAINT_BANDWIDTH,
 	},
 	/* ipu_c1's rpmsg backend */
