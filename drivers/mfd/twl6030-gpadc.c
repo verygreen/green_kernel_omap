@@ -1204,6 +1204,7 @@ static int twl6032_calibration(struct twl6030_gpadc_data *gpadc)
 				d2 = -d2;
 
 			d2 += temp;
+			break;
 		case 10:
 			/* D1 */
 			d1 = (trim_regs[11] & 0x0F) << 3;

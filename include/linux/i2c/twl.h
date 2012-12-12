@@ -783,6 +783,15 @@ struct twl4030_codec_audio_data {
 
 	/* twl6040 */
 	int vddhf_uV;
+	int vddhf_gpo;
+	int lineout_gpio;
+	int hook_gpadc_ch;
+	int hook_ref_vol;
+	int hs_jack_debounce;
+};
+
+struct twl4030_codec_hskeys_data {
+	void *data;
 };
 
 struct twl4030_codec_vibra_data {
@@ -800,6 +809,7 @@ struct twl4030_codec_data {
 	unsigned int	audio_mclk;
 	struct twl4030_codec_audio_data		*audio;
 	struct twl4030_codec_vibra_data		*vibra;
+	struct twl4030_codec_hskeys_data	*hskeys;
 
 	int (*init)(void);
 	void (*exit)(void);
