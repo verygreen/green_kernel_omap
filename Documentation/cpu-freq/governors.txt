@@ -251,7 +251,6 @@ boostpulse: Immediately boost speed of all CPUs to hispeed_freq for
 min_sample_time, after which speeds are allowed to drop below
 hispeed_freq according to load as usual.
 
-
 2.7 Hotplug
 -----------
 

@@ -34,11 +34,6 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/cpufreq_interactive.h>
 
-#include <linux/kernel.h>
-#include <linux/module.h>
-#include <linux/init.h>
-#include <linux/slab.h>
-
 static atomic_t active_count = ATOMIC_INIT(0);
 
 struct cpufreq_interactive_cpuinfo {
@@ -105,12 +100,12 @@ static enum tune_values {
 static u64 hispeed_freq;
 
 /* Go to hi speed when CPU load at or above this value. */
-#define DEFAULT_GO_HISPEED_LOAD 95
+#define DEFAULT_GO_HISPEED_LOAD 85
 static unsigned long go_hispeed_load;
 /*
  * The minimum amount of time to spend at a frequency before we can ramp down.
  */
-#define DEFAULT_MIN_SAMPLE_TIME (20 * USEC_PER_MSEC)
+#define DEFAULT_MIN_SAMPLE_TIME (80 * USEC_PER_MSEC)
 static unsigned long min_sample_time;
 
 /*
@@ -260,47 +255,6 @@ static void cpufreq_interactive_timer(unsigned long data)
 						  += pcpu->load_history[j];
 		if (j == 0)
 			j = sampling_periods;
-	}
-
-	/* return to first element if we're at the circular buffer's end */
-	if (++pcpu->history_load_index == sampling_periods)
-		pcpu->history_load_index = 0;
-	else if (unlikely(pcpu->history_load_index > sampling_periods)) {
-		/*
-		 * This not supposed to happen.
-		 * If we got here - means something is wrong.
-		 */
-		pr_err("%s: have gone beyond allocated buffer of history!\n",
-					__func__);
-		pcpu->history_load_index = 0;
-	}
-
-	pcpu->total_avg_load = pcpu->total_load_history / sampling_periods;
-
-	if (pcpu->total_avg_load > hi_perf_threshold)
-		new_tune_value = HIGH_PERF_TUNE;
-	else if (pcpu->total_avg_load < low_power_threshold)
-		new_tune_value = LOW_POWER_TUNE;
-	else
-		new_tune_value = DEFAULT_TUNE;
-
-	if (new_tune_value != cur_tune_value)
-		if ((pcpu->cpu_tune_value != new_tune_value)
-			&& ((new_tune_value == HIGH_PERF_TUNE)
-				|| (new_tune_value == LOW_POWER_TUNE))) {
-			spin_lock_irqsave(&tune_cpumask_lock, flags);
-			cpumask_set_cpu(data, &tune_cpumask);
-			spin_unlock_irqrestore(&tune_cpumask_lock, flags);
-			queue_work(tune_wq, &tune_work);
-		}
-	pcpu->cpu_tune_value = new_tune_value;
-
-	if (cur_tune_value == LOW_POWER_TUNE) {
-		if (low_power_rate < sampling_periods)
-			cpu_load = pcpu->low_power_rate_history
-						/ low_power_rate;
-		else
-			cpu_load = pcpu->total_avg_load;
 	}
 
 	if (cpu_load >= go_hispeed_load || boost_val) {
@@ -965,141 +919,6 @@ static ssize_t store_boostpulse(struct kobject *kobj, struct attribute *attr,
 static struct global_attr boostpulse =
 	__ATTR(boostpulse, 0200, NULL, store_boostpulse);
 
-static ssize_t show_sampling_periods(struct kobject *kobj,
-			struct attribute *attr, char *buf)
-{
-	return sprintf(buf, "%u\n", sampling_periods);
-}
-
-static ssize_t store_sampling_periods(struct kobject *kobj,
-			struct attribute *attr, const char *buf, size_t count)
-{
-	int ret;
-	unsigned int val, t_mask = 0;
-	unsigned int *temp;
-	unsigned int j, i;
-	struct cpufreq_interactive_cpuinfo *pcpu;
-
-	ret = sscanf(buf, "%u", &val);
-	if (ret != 1)
-		return ret;
-
-	if (val == sampling_periods)
-		return count;
-
-	mutex_lock(&set_speed_lock);
-
-	for_each_present_cpu(j) {
-		pcpu = &per_cpu(cpuinfo, j);
-		ret = del_timer_sync(&pcpu->cpu_timer);
-		if (ret)
-			t_mask |= BIT(j);
-		pcpu->history_load_index = 0;
-
-		temp = kmalloc((sizeof(unsigned int) * val), GFP_KERNEL);
-		if (!temp) {
-			pr_err("%s:can't allocate memory for history\n",
-					__func__);
-			count = -ENOMEM;
-			goto out;
-		}
-		memcpy(temp, pcpu->load_history,
-			(min(sampling_periods, val) * sizeof(unsigned int)));
-		if (val > sampling_periods)
-			for (i = sampling_periods; i < val; i++)
-				temp[i] = 50;
-
-		kfree(pcpu->load_history);
-		pcpu->load_history = temp;
-	}
-
-out:
-	if (!(count < 0 && val > sampling_periods))
-		sampling_periods = val;
-
-	for_each_online_cpu(j) {
-		pcpu = &per_cpu(cpuinfo, j);
-		if (t_mask & BIT(j))
-			mod_timer(&pcpu->cpu_timer,
-				jiffies + usecs_to_jiffies(timer_rate));
-	}
-
-	mutex_unlock(&set_speed_lock);
-
-	return count;
-}
-
-static struct global_attr sampling_periods_attr = __ATTR(sampling_periods,
-			0644, show_sampling_periods, store_sampling_periods);
-
-static ssize_t show_hi_perf_threshold(struct kobject *kobj,
-			struct attribute *attr, char *buf)
-{
-	return sprintf(buf, "%u\n", hi_perf_threshold);
-}
-
-static ssize_t store_hi_perf_threshold(struct kobject *kobj,
-			struct attribute *attr, const char *buf, size_t count)
-{
-	int ret;
-	unsigned long val;
-
-	ret = strict_strtoul(buf, 0, &val);
-	if (ret < 0)
-		return ret;
-	hi_perf_threshold = val;
-	return count;
-}
-
-static struct global_attr hi_perf_threshold_attr = __ATTR(hi_perf_threshold,
-			0644, show_hi_perf_threshold, store_hi_perf_threshold);
-
-
-static ssize_t show_low_power_threshold(struct kobject *kobj,
-			struct attribute *attr, char *buf)
-{
-	return sprintf(buf, "%u\n", low_power_threshold);
-}
-
-static ssize_t store_low_power_threshold(struct kobject *kobj,
-			struct attribute *attr, const char *buf, size_t count)
-{
-	int ret;
-	unsigned long val;
-
-	ret = strict_strtoul(buf, 0, &val);
-	if (ret < 0)
-		return ret;
-	low_power_threshold = val;
-	return count;
-}
-
-static struct global_attr low_power_threshold_attr = __ATTR(low_power_threshold,
-		     0644, show_low_power_threshold, store_low_power_threshold);
-
-static ssize_t show_low_power_rate(struct kobject *kobj,
-			struct attribute *attr, char *buf)
-{
-	return sprintf(buf, "%u\n", low_power_rate);
-}
-
-static ssize_t store_low_power_rate(struct kobject *kobj,
-			struct attribute *attr, const char *buf, size_t count)
-{
-	int ret;
-	unsigned long val;
-
-	ret = strict_strtoul(buf, 0, &val);
-	if (ret < 0)
-		return ret;
-	low_power_rate = val;
-	return count;
-}
-
-static struct global_attr low_power_rate_attr = __ATTR(low_power_rate,
-		     0644, show_low_power_rate, store_low_power_rate);
-
-
 static struct attribute *interactive_attributes[] = {
 	&hispeed_freq_attr.attr,
 	&go_hispeed_load_attr.attr,
@@ -1109,10 +928,6 @@ static struct attribute *interactive_attributes[] = {
 	&input_boost.attr,
 	&boost.attr,
 	&boostpulse.attr,
-	&low_power_threshold_attr.attr,
-	&hi_perf_threshold_attr.attr,
-	&sampling_periods_attr.attr,
-	&low_power_rate_attr.attr,
 	NULL,
 };
 
